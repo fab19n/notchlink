@@ -81,15 +81,20 @@ function Genie({ effect, onDone }: { effect: FxEvent; onDone: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    // React (StrictMode, in dev) may start this effect, cancel it and start it again. A cancelled
+    // run must stop without side effects: telling Rust "ready"/"done" or removing the effect from
+    // the screen would cut the real run short. So it checks `cancelled` after every wait.
     let cancelled = false;
     (async () => {
+      const image = await loadSnapshot(effect);
+      if (cancelled) return;
+
       const element = canvas.current!;
       const dpr = window.devicePixelRatio;
       element.width = window.innerWidth * dpr;
       element.height = window.innerHeight * dpr;
       const ctx = element.getContext("2d")!;
       ctx.scale(dpr, dpr);
-      const image = await loadSnapshot(effect);
       // Minimizing goes window -> icon (p 0 -> 1); restoring plays it backwards.
       const progress = (t: number) => (effect.kind === "genie-out" ? t : 1 - t);
       const frame = (t: number) => {
@@ -99,12 +104,15 @@ function Genie({ effect, onDone }: { effect: FxEvent; onDone: () => void }) {
 
       frame(0);
       await nextFrame(); // first frame is on screen
+      if (cancelled) return;
       await invoke("fx_ready", { id: effect.id });
 
       const start = performance.now();
       let frames = 0;
-      for (let t = 0; t < 1 && !cancelled; frames++) {
-        t = Math.min(1, (await nextFrame() - start) / GENIE_MS);
+      for (let t = 0; t < 1; frames++) {
+        const now = await nextFrame();
+        if (cancelled) return;
+        t = Math.min(1, (now - start) / GENIE_MS);
         frame(t);
       }
       log(
@@ -112,8 +120,8 @@ function Genie({ effect, onDone }: { effect: FxEvent; onDone: () => void }) {
           `canvas ${element.width}x${element.height}, ${frames} frames, ${document.visibilityState}`,
       );
       await invoke("fx_done", { id: effect.id });
-      if (effect.kind === "genie-in") await new Promise((r) => setTimeout(r, HANDOFF_MS));
-      onDone();
+      if (effect.kind === "genie-in") await new Promise((resolve) => setTimeout(resolve, HANDOFF_MS));
+      if (!cancelled) onDone();
     })();
     return () => {
       cancelled = true;
@@ -160,15 +168,23 @@ function TvOff({ effect, onDone }: { effect: FxEvent; onDone: () => void }) {
   const { window: win } = effect;
 
   useEffect(() => {
+    // Same rule as Genie: a run React cancels (StrictMode, in dev) must have no side effects.
+    let cancelled = false;
     (async () => {
+      const image = await loadSnapshot(effect);
+      if (cancelled) return;
       const element = canvas.current!;
       element.width = effect.width;
       element.height = effect.height;
-      element.getContext("2d")!.drawImage(await loadSnapshot(effect), 0, 0);
+      element.getContext("2d")!.drawImage(image, 0, 0);
       await nextFrame();
+      if (cancelled) return;
       await invoke("fx_ready", { id: effect.id });
       setPlaying(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [effect]);
 
   return (
