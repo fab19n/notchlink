@@ -37,8 +37,11 @@ windows = { version = "0.62", features = [
 ] }
 wmi = { version = "0.18", default-features = false }
 
-# Optimise dependencies even in dev builds: window snapshots are PNG-encoded,
-# which is very slow unoptimised. Our own code still compiles fast.
+# Optimise even dev builds a little: window snapshots loop over millions of
+# pixels, which is very slow unoptimised. Dependencies get more, as they rarely recompile.
+[profile.dev]
+opt-level = 1
+
 [profile.dev.package."*"]
 opt-level = 2
 

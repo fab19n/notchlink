@@ -1,25 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { Rect } from "../shared/overlay";
 
 /** Mirrors `FxEvent` in src-tauri/src/fx.rs. Rects are in this window's CSS px. */
-type FxEvent = { kind: "genie" | "tv-off"; image: string; from: Rect; to: Rect | null };
-type Effect = FxEvent & { id: number };
+type FxEvent = {
+  id: number;
+  kind: "genie-out" | "genie-in" | "tv-off";
+  width: number;
+  height: number;
+  window: Rect;
+  icon: Rect | null;
+};
 
-const GENIE_MS = 520;
-/** Horizontal slices the genie bends the snapshot into. More = smoother curve. */
-const GENIE_SLICES = 120;
+const GENIE_MS = 560;
+const TV_OFF_MS = 500;
+/** Horizontal slices the genie bends the snapshot into. More = smoother curves. */
+const GENIE_SLICES = 180;
+/** After a restore, the last frame stays this long so the real window can appear under it. */
+const HANDOFF_MS = 80;
 
-/** Full-screen, click-through layer that plays the minimize and close animations. */
+/**
+ * Full-screen, click-through layer that plays the dock's window animations.
+ * Protocol with Rust (fx.rs): fetch the snapshot, paint the first frame, call `fx_ready`
+ * (the real window minimizes/closes under it), animate, call `fx_done` (a restore shows the window).
+ */
 export default function Fx() {
-  const [effects, setEffects] = useState<Effect[]>([]);
+  const [effects, setEffects] = useState<FxEvent[]>([]);
 
   useEffect(() => {
-    let next = 0;
-    const unlisten = getCurrentWebviewWindow().listen<FxEvent>("fx", (e) =>
-      setEffects((list) => [...list, { ...e.payload, id: next++ }]),
-    );
+    const unlisten = getCurrentWebviewWindow().listen<FxEvent>("fx", (e) => setEffects((list) => [...list, e.payload]));
     return () => {
       unlisten.then((stop) => stop());
     };
@@ -30,93 +41,134 @@ export default function Fx() {
   return (
     <>
       {effects.map((effect) =>
-        effect.kind === "genie" ? (
-          <Genie key={effect.id} effect={effect} onDone={() => remove(effect.id)} />
-        ) : (
+        effect.kind === "tv-off" ? (
           <TvOff key={effect.id} effect={effect} onDone={() => remove(effect.id)} />
+        ) : (
+          <Genie key={effect.id} effect={effect} onDone={() => remove(effect.id)} />
         ),
       )}
     </>
   );
 }
 
-/**
- * macOS-style genie: the snapshot is drawn as thin horizontal slices. The bottom slices
- * narrow toward the dock icon first and the top follows, which bends the sides into a funnel.
- */
-function Genie({ effect, onDone }: { effect: Effect; onDone: () => void }) {
+/** The snapshot's raw RGBA pixels, as something a canvas can draw. */
+async function loadSnapshot(effect: FxEvent): Promise<ImageBitmap> {
+  const bytes = await invoke<ArrayBuffer>("get_fx_image", { id: effect.id });
+  return createImageBitmap(new ImageData(new Uint8ClampedArray(bytes), effect.width, effect.height));
+}
+
+const nextFrame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
+
+function Genie({ effect, onDone }: { effect: FxEvent; onDone: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const element = canvas.current!;
-    const dpr = window.devicePixelRatio;
-    element.width = window.innerWidth * dpr;
-    element.height = window.innerHeight * dpr;
-    const ctx = element.getContext("2d")!;
-    ctx.scale(dpr, dpr);
-
-    const { from, to } = effect;
-    const target = to!;
-    const image = new Image();
-    let frame = 0;
-    image.onload = () => {
-      const start = performance.now();
-      const draw = (now: number) => {
-        const p = Math.min(1, (now - start) / GENIE_MS);
+    let cancelled = false;
+    (async () => {
+      const element = canvas.current!;
+      const dpr = window.devicePixelRatio;
+      element.width = window.innerWidth * dpr;
+      element.height = window.innerHeight * dpr;
+      const ctx = element.getContext("2d")!;
+      ctx.scale(dpr, dpr);
+      const image = await loadSnapshot(effect);
+      // Minimizing goes window -> icon (p 0 -> 1); restoring plays it backwards.
+      const progress = (t: number) => (effect.kind === "genie-out" ? t : 1 - t);
+      const frame = (t: number) => {
         ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        ctx.globalAlpha = p > 0.85 ? (1 - p) / 0.15 : 1;
-
-        const topY = lerp(from.y, target.y, easeInOut(p));
-        const bottomY = lerp(from.y + from.height, target.y + target.height, easeOut(Math.min(1, p * 1.5)));
-        const sliceSrc = image.height / GENIE_SLICES;
-        const sliceDst = (bottomY - topY) / GENIE_SLICES;
-        for (let i = 0; i < GENIE_SLICES; i++) {
-          const v = (i + 0.5) / GENIE_SLICES; // 0 = top of window, 1 = bottom
-          const pull = smoothstep(clamp(p * 1.6 - (1 - v) * 0.6));
-          const left = lerp(from.x, target.x, pull);
-          const right = lerp(from.x + from.width, target.x + target.width, pull);
-          ctx.drawImage(image, 0, i * sliceSrc, image.width, sliceSrc, left, topY + i * sliceDst, right - left, sliceDst + 0.5);
-        }
-
-        if (p < 1) frame = requestAnimationFrame(draw);
-        else onDone();
+        drawGenie(ctx, image, effect.window, effect.icon!, progress(t));
       };
-      frame = requestAnimationFrame(draw);
+
+      frame(0);
+      await nextFrame(); // first frame is on screen
+      await invoke("fx_ready", { id: effect.id });
+
+      const start = performance.now();
+      for (let t = 0; t < 1 && !cancelled; ) {
+        t = Math.min(1, (await nextFrame() - start) / GENIE_MS);
+        frame(t);
+      }
+      await invoke("fx_done", { id: effect.id });
+      if (effect.kind === "genie-in") await new Promise((r) => setTimeout(r, HANDOFF_MS));
+      onDone();
+    })();
+    return () => {
+      cancelled = true;
     };
-    image.src = effect.image;
-    return () => cancelAnimationFrame(frame);
     // Runs once per effect; onDone only removes this effect, so it isn't a dependency.
   }, [effect]);
 
   return <canvas ref={canvas} style={{ position: "fixed", inset: 0, width: "100%", height: "100%" }} />;
 }
 
+/**
+ * macOS-style genie at progress p (0 = the window, 1 = inside the icon).
+ *
+ * The sides follow a funnel: an S-curve from the window's left/right edges down to the icon's.
+ * Early on, the sides bend into that funnel and the bottom edge is pulled down into the icon;
+ * then the rest of the window slides down through the funnel. The snapshot is drawn as thin
+ * horizontal slices, each as wide as the funnel at the height it currently sits.
+ */
+function drawGenie(ctx: CanvasRenderingContext2D, image: ImageBitmap, win: Rect, icon: Rect, p: number) {
+  const bend = easeOutCubic(clamp(p / 0.4)); // how far the sides have bent into the funnel
+  const topY = lerp(win.y, icon.y, easeInCubic(clamp((p - 0.1) / 0.9)));
+  const bottomY = lerp(win.y + win.height, icon.y + icon.height, easeInOutCubic(clamp(p / 0.6)));
+  const funnelLength = Math.max(1, icon.y - win.y);
+
+  ctx.globalAlpha = p > 0.9 ? (1 - p) / 0.1 : 1;
+  const srcSlice = image.height / GENIE_SLICES;
+  const dstSlice = (bottomY - topY) / GENIE_SLICES;
+  for (let i = 0; i < GENIE_SLICES; i++) {
+    const y = topY + i * dstSlice;
+    const along = smoothstep(clamp((y + dstSlice / 2 - win.y) / funnelLength));
+    const funnelLeft = lerp(win.x, icon.x, along);
+    const funnelRight = lerp(win.x + win.width, icon.x + icon.width, along);
+    const left = lerp(win.x, funnelLeft, bend);
+    const right = lerp(win.x + win.width, funnelRight, bend);
+    ctx.drawImage(image, 0, i * srcSlice, image.width, srcSlice, left, y, right - left, dstSlice + 0.6);
+  }
+  ctx.globalAlpha = 1;
+}
+
 /** Old CRT switching off: collapses to a bright line, then to a dot, then fades. */
-function TvOff({ effect, onDone }: { effect: Effect; onDone: () => void }) {
-  const { from } = effect;
+function TvOff({ effect, onDone }: { effect: FxEvent; onDone: () => void }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const { window: win } = effect;
+
+  useEffect(() => {
+    (async () => {
+      const element = canvas.current!;
+      element.width = effect.width;
+      element.height = effect.height;
+      element.getContext("2d")!.drawImage(await loadSnapshot(effect), 0, 0);
+      await nextFrame();
+      await invoke("fx_ready", { id: effect.id });
+      setPlaying(true);
+    })();
+  }, [effect]);
+
   return (
     <motion.div
       style={{
         position: "fixed",
-        left: from.x,
-        top: from.y,
-        width: from.width,
-        height: from.height,
+        left: win.x,
+        top: win.y,
+        width: win.width,
+        height: win.height,
         overflow: "hidden",
         background: "#fff",
         boxShadow: "0 0 24px 6px rgba(255,255,255,0.8)",
       }}
       initial={{ scaleY: 1, scaleX: 1, opacity: 1 }}
-      animate={{ scaleY: [1, 0.004, 0.004, 0.004], scaleX: [1, 1, 0.003, 0.003], opacity: [1, 1, 1, 0] }}
-      transition={{ duration: 0.5, times: [0, 0.45, 0.8, 1], ease: ["easeIn", "easeIn", "linear"] }}
-      onAnimationComplete={onDone}
+      animate={playing ? { scaleY: [1, 0.004, 0.004, 0.004], scaleX: [1, 1, 0.003, 0.003], opacity: [1, 1, 1, 0] } : undefined}
+      transition={{ duration: TV_OFF_MS / 1000, times: [0, 0.45, 0.8, 1], ease: ["easeIn", "easeIn", "linear"] }}
+      onAnimationComplete={() => playing && invoke("fx_done", { id: effect.id }).then(onDone)}
     >
-      <motion.img
-        src={effect.image}
-        draggable={false}
+      <motion.canvas
+        ref={canvas}
         style={{ width: "100%", height: "100%", display: "block" }}
-        initial={{ filter: "brightness(1)", opacity: 1 }}
-        animate={{ filter: ["brightness(1)", "brightness(3)"], opacity: [1, 0] }}
+        animate={playing ? { filter: ["brightness(1)", "brightness(3)"], opacity: [1, 0] } : undefined}
         transition={{ duration: 0.25, ease: "easeIn" }}
       />
     </motion.div>
@@ -126,5 +178,6 @@ function TvOff({ effect, onDone }: { effect: Effect; onDone: () => void }) {
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (t: number) => Math.max(0, Math.min(1, t));
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
-const easeOut = (t: number) => 1 - (1 - t) ** 3;
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
+const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+const easeInCubic = (t: number) => t ** 3;
+const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);

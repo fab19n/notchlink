@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionValue, useMotionValue, useSpring, useTransform } from "motion/react";
 import { Rect, setHitBottomEdge, setHitRect, setHitRectAndBottomEdge, usePointerInside } from "../shared/overlay";
 import { DOCK_PADDING, openSettings, quit, Settings, useSettings } from "../shared/settings";
-import { activate, closeWindow, DockApp, minimize, useDockApps, useIcon } from "./windows";
+import { closeWindow, DockApp, toggle, useDockApps, useIcon } from "./windows";
 
 /** Icons grow to this multiple of their size under the cursor (keep in sync with src-tauri/src/dock.rs). */
 const MAGNIFY = 1.55;
@@ -154,13 +154,7 @@ function DockIcon({ app, size, mouseX, menuOpen, onMenu }: IconProps) {
     const r = ref.current!.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height };
   };
-  const onClick = () => {
-    if (app.isForeground) {
-      minimize(front.hwnd, iconRect());
-    } else {
-      activate(front.hwnd);
-    }
-  };
+  const onClick = () => toggle(app, iconRect());
 
   return (
     <motion.button
@@ -204,9 +198,7 @@ function ContextMenu({ menu, bottom, onDone, ref }: MenuProps) {
   const items =
     menu.kind === "app"
       ? [
-          menu.app.isForeground
-            ? { label: "Minimize", run: () => minimize(menu.app.windows[0].hwnd, menu.icon) }
-            : { label: "Show", run: () => activate(menu.app.windows[0].hwnd) },
+          { label: menu.app.isForeground ? "Minimize" : "Show", run: () => toggle(menu.app, menu.icon) },
           { label: "Close window", run: () => closeWindow(menu.app.windows[0].hwnd) },
         ]
       : [

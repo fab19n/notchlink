@@ -40,13 +40,18 @@ pub fn run() {
         )
         .manage(hit::HitAreas::default())
         .manage(win::IconCache::default())
+        .manage(fx::FxState::default())
         .invoke_handler(tauri::generate_handler![
             hit::set_hit_area,
             win::get_windows,
             win::get_icon,
             win::activate_window,
             fx::minimize_window,
+            fx::restore_window,
             fx::close_window,
+            fx::get_fx_image,
+            fx::fx_ready,
+            fx::fx_done,
             levels::get_volume_level,
             levels::set_volume_level,
             levels::get_brightness_level,

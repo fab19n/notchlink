@@ -11,7 +11,8 @@ A notch island and dock for Windows, built with Tauri 2, Rust, React and Motion.
 - **Dock:** replaces the Windows taskbar (switchable in settings).
   - Shows your open apps (one icon per program), with a dot for the app in front.
   - Icons magnify near the cursor; the window title shows on hover.
-  - Click: bring that app to the front, or minimize it with a genie animation if it's already in front.
+  - Click: minimize the front app with a genie into its icon; click again to restore it with the genie in reverse.
+    Other apps just come to the front.
   - Right-click an icon: Minimize/Show, Close window (with a TV switch-off animation).
   - Right-click empty dock space: Settings, Quit notchlink.
   - Auto-hide: slides away, comes back when the mouse touches the bottom edge. With auto-hide off,
@@ -84,7 +85,8 @@ turn off "Automatically hide the taskbar" in Windows Settings > Personalization 
 
 - Store (UWP) apps may show the wrong icon, because their window belongs to a host process.
 - Apps running as administrator are skipped (Windows doesn't let a normal app read their details).
-- The genie and TV-off animations only play for dock actions, not the apps' own buttons.
+- The genie and TV-off animations only play for dock actions, not the apps' own buttons. Restoring
+  plays the genie only for windows minimized from the dock (it reuses their snapshot).
 - If an app asks "save changes?" when closed from the dock, the TV-off animation still plays.
 - The system tray, notifications and quick settings are hidden with the taskbar until they move into the island.
 - The dock has no pinned apps yet.

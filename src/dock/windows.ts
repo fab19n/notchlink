@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { Rect } from "../shared/overlay";
 
 /** Mirrors `AppWindow` in src-tauri/src/win.rs. */
-export type AppWindow = { hwnd: number; title: string; exePath: string; isForeground: boolean };
+export type AppWindow = { hwnd: number; title: string; exePath: string; isForeground: boolean; isMinimized: boolean };
 
 /** One dock icon: all open windows of one program, front-most first. */
 export type DockApp = { exePath: string; name: string; windows: AppWindow[]; isForeground: boolean };
@@ -69,6 +69,19 @@ export function activate(hwnd: number) {
 /** Minimize with the genie animation into `icon` (the dock icon's rect in this window). */
 export function minimize(hwnd: number, icon: Rect) {
   return invoke("minimize_window", { hwnd, icon });
+}
+
+/** Restore a minimized window with the genie coming out of `icon`. */
+export function restore(hwnd: number, icon: Rect) {
+  return invoke("restore_window", { hwnd, icon });
+}
+
+/** Click on an app's dock icon: minimize it if it's in front, otherwise bring it up. */
+export function toggle(app: DockApp, icon: Rect) {
+  const front = app.windows[0];
+  if (app.isForeground) return minimize(front.hwnd, icon);
+  if (front.isMinimized) return restore(front.hwnd, icon);
+  return activate(front.hwnd);
 }
 
 /** Close with the TV switch-off animation. */

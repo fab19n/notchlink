@@ -37,6 +37,7 @@ pub struct AppWindow {
     /// Full path of the program that owns the window; the dock groups windows by it.
     exe_path: String,
     is_foreground: bool,
+    is_minimized: bool,
 }
 
 /// Top-level windows a user would expect in a taskbar, front-most first.
@@ -57,6 +58,7 @@ pub fn get_windows() -> Vec<AppWindow> {
                 title: title(hwnd),
                 exe_path: exe_path(hwnd)?,
                 is_foreground: hwnd == foreground,
+                is_minimized: unsafe { IsIconic(hwnd).as_bool() },
             })
         })
         .collect()
