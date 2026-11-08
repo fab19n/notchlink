@@ -67,15 +67,18 @@ pub fn run() {
             // Ctrl+C in the terminal (or closing it) must also bring the taskbar back.
             unsafe { SetConsoleCtrlHandler(Some(on_console_exit), true)? };
 
+            // Shared state first: windows start loading as soon as they're created and may call
+            // get_settings straight away.
             let settings = settings::load(handle)?;
+            app.manage(settings::SettingsState(Mutex::new(settings.clone())));
+            app.manage(levels::start());
+
             overlay::create_island(handle)?;
             overlay::create_dock(handle)?;
             overlay::create_fx(handle)?;
             overlay::create_edges(handle)?;
-            app.manage(levels::start());
             settings::apply(handle, &settings);
             overlay::show_dock(handle)?;
-            app.manage(settings::SettingsState(Mutex::new(settings)));
 
             hit::spawn_hit_tester(handle.clone());
             win::spawn_window_watcher(handle.clone());
