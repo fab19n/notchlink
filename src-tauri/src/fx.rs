@@ -167,6 +167,12 @@ pub fn fx_done(id: u32, state: State<FxState>) -> Result<(), String> {
     Ok(())
 }
 
+/// Diagnostics from the fx page, printed to the terminal.
+#[tauri::command]
+pub fn fx_log(message: String) {
+    eprintln!("[fx-page] {message}");
+}
+
 fn show(hwnd: isize, command: SHOW_WINDOW_CMD) {
     unsafe { _ = ShowWindow(HWND(hwnd as *mut _), command) };
 }

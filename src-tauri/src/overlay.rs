@@ -84,7 +84,14 @@ pub fn create_fx(app: &AppHandle) -> tauri::Result<()> {
     let monitor = primary_monitor(app)?;
     window.set_size(PhysicalSize::new(monitor.size().width, monitor.size().height))?;
     window.set_position(*monitor.position())?;
-    window.show()
+    window.show()?;
+    eprintln!(
+        "[fx] window at {:?}, size {:?}, visible {}",
+        window.outer_position()?,
+        window.outer_size()?,
+        window.is_visible()?
+    );
+    Ok(())
 }
 
 /// Async on purpose: on Windows, creating a window from a sync command deadlocks the app.

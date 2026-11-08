@@ -52,6 +52,7 @@ pub fn run() {
             fx::get_fx_image,
             fx::fx_ready,
             fx::fx_done,
+            fx::fx_log,
             levels::get_volume_level,
             levels::set_volume_level,
             levels::get_brightness_level,

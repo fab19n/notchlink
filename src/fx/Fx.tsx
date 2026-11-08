@@ -28,6 +28,15 @@ const HANDOFF_MS = 80;
  */
 export default function Fx() {
   const [effects, setEffects] = useState<FxEvent[]>([]);
+  const [selfTest, setSelfTest] = useState(import.meta.env.DEV);
+
+  // Diagnostics: what this layer looks like from the inside, and (dev builds only) a red square
+  // for 3 s at startup, to check this window shows up on screen at all.
+  useEffect(() => {
+    log(`page ${window.innerWidth}x${window.innerHeight} css px, dpr ${window.devicePixelRatio}, ${document.visibilityState}`);
+    const timer = setTimeout(() => setSelfTest(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const unlisten = getCurrentWebviewWindow().listen<FxEvent>("fx", (e) => setEffects((list) => [...list, e.payload]));
@@ -40,6 +49,9 @@ export default function Fx() {
 
   return (
     <>
+      {selfTest && (
+        <div style={{ position: "fixed", left: "50%", top: "50%", width: 160, height: 160, margin: -80, background: "red" }} />
+      )}
       {effects.map((effect) =>
         effect.kind === "tv-off" ? (
           <TvOff key={effect.id} effect={effect} onDone={() => remove(effect.id)} />
@@ -56,6 +68,12 @@ async function loadSnapshot(effect: FxEvent): Promise<ImageBitmap> {
   const bytes = await invoke<ArrayBuffer>("get_fx_image", { id: effect.id });
   return createImageBitmap(new ImageData(new Uint8ClampedArray(bytes), effect.width, effect.height));
 }
+
+function log(message: string) {
+  invoke("fx_log", { message });
+}
+
+const r = (rect: Rect | null) => (rect ? `${Math.round(rect.x)},${Math.round(rect.y)} ${Math.round(rect.width)}x${Math.round(rect.height)}` : "none");
 
 const nextFrame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
 
@@ -84,10 +102,15 @@ function Genie({ effect, onDone }: { effect: FxEvent; onDone: () => void }) {
       await invoke("fx_ready", { id: effect.id });
 
       const start = performance.now();
-      for (let t = 0; t < 1 && !cancelled; ) {
+      let frames = 0;
+      for (let t = 0; t < 1 && !cancelled; frames++) {
         t = Math.min(1, (await nextFrame() - start) / GENIE_MS);
         frame(t);
       }
+      log(
+        `${effect.kind}: window ${r(effect.window)}, icon ${r(effect.icon)}, image ${image.width}x${image.height}, ` +
+          `canvas ${element.width}x${element.height}, ${frames} frames, ${document.visibilityState}`,
+      );
       await invoke("fx_done", { id: effect.id });
       if (effect.kind === "genie-in") await new Promise((r) => setTimeout(r, HANDOFF_MS));
       onDone();
