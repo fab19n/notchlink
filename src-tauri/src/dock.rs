@@ -54,6 +54,15 @@ pub fn layout(app: &AppHandle, settings: &Settings) {
     let x = monitor.position().x + (monitor.size().width as i32 - width) / 2;
     let y = bottom - (height as f64 * scale) as i32;
     window.set_position(PhysicalPosition::new(x, y)).expect("can't move dock");
+    eprintln!(
+        "[dock] window {width}x{} px at ({x}, {y}); monitor {}x{} at ({}, {}), scale {scale}; autohide {}",
+        (height as f64 * scale) as i32,
+        monitor.size().width,
+        monitor.size().height,
+        monitor.position().x,
+        monitor.position().y,
+        settings.dock_autohide,
+    );
 }
 
 /// Registers the dock as a bottom app bar of `height` physical px; returns the bottom edge Windows gave it.

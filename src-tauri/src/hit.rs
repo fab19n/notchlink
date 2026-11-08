@@ -1,7 +1,8 @@
 //! Click-through for the overlay windows.
 //!
 //! Each overlay window is mostly transparent. The frontend reports the one
-//! rectangle that should receive the mouse (the island or the dock bar).
+//! area that should receive the mouse: a rectangle (the island, the dock bar),
+//! or the bottom edge of the screen (the hidden dock's wake-up strip).
 //! A background thread polls the cursor: outside that rectangle the window
 //! ignores the mouse, so clicks reach the apps underneath. The thread also
 //! tells the frontend when the pointer enters or leaves, because the page
@@ -37,12 +38,23 @@ impl Rect {
     }
 }
 
+#[derive(Clone, Copy, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum HitArea {
+    /// CSS px relative to the window's top-left corner.
+    Rect(Rect),
+    /// The bottom `height` CSS px of the primary monitor, across its full width.
+    BottomEdge { height: f64 },
+    /// Either of the two: an auto-hidden dock stays up while the mouse is on it or on the screen edge.
+    RectAndBottomEdge { rect: Rect, height: f64 },
+}
+
 #[derive(Default)]
-pub struct HitRects(Mutex<HashMap<String, Rect>>);
+pub struct HitAreas(Mutex<HashMap<String, HitArea>>);
 
 #[tauri::command]
-pub fn set_hit_rect(window: WebviewWindow, rect: Rect, rects: State<HitRects>) {
-    rects.0.lock().unwrap().insert(window.label().to_string(), rect);
+pub fn set_hit_area(window: WebviewWindow, area: HitArea, areas: State<HitAreas>) {
+    areas.0.lock().unwrap().insert(window.label().to_string(), area);
 }
 
 pub fn spawn_hit_tester(app: AppHandle) {
@@ -54,15 +66,27 @@ pub fn spawn_hit_tester(app: AppHandle) {
             let cursor = app.cursor_position().expect("cursor position unavailable");
             for label in [ISLAND, DOCK] {
                 let window = app.get_webview_window(label).expect("overlay window missing");
-                let Some(rect) = app.state::<HitRects>().0.lock().unwrap().get(label).copied() else {
+                let Some(area) = app.state::<HitAreas>().0.lock().unwrap().get(label).copied() else {
                     continue;
                 };
-                let origin = window.outer_position().expect("window position unavailable");
-                let scale = window.scale_factor().expect("scale factor unavailable");
-                let x = (cursor.x - origin.x as f64) / scale;
-                let y = (cursor.y - origin.y as f64) / scale;
-                let now_inside = rect.contains(x, y);
+                let in_rect = |rect: Rect| {
+                    let origin = window.outer_position().expect("window position unavailable");
+                    let scale = window.scale_factor().expect("scale factor unavailable");
+                    rect.contains((cursor.x - origin.x as f64) / scale, (cursor.y - origin.y as f64) / scale)
+                };
+                let on_bottom_edge = |height: f64| {
+                    let monitor = app.primary_monitor().unwrap().expect("no primary monitor found");
+                    let (left, top) = (monitor.position().x as f64, monitor.position().y as f64);
+                    let (width, bottom) = (monitor.size().width as f64, top + monitor.size().height as f64);
+                    cursor.x >= left && cursor.x < left + width && cursor.y >= bottom - height * monitor.scale_factor()
+                };
+                let now_inside = match area {
+                    HitArea::Rect(rect) => in_rect(rect),
+                    HitArea::BottomEdge { height } => on_bottom_edge(height),
+                    HitArea::RectAndBottomEdge { rect, height } => in_rect(rect) || on_bottom_edge(height),
+                };
                 if inside.get(label) != Some(&now_inside) {
+                    eprintln!("[hit] {label}: pointer {} at ({:.0}, {:.0})", if now_inside { "in" } else { "out" }, cursor.x, cursor.y);
                     inside.insert(label, now_inside);
                     window
                         .set_ignore_cursor_events(!now_inside)

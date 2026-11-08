@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionValue, useMotionValue, useSpring, useTransform } from "motion/react";
-import { Rect, setHitRect, usePointerInside } from "../shared/overlay";
+import { Rect, setHitBottomEdge, setHitRect, setHitRectAndBottomEdge, usePointerInside } from "../shared/overlay";
 import { openSettings, quit, Settings, useSettings } from "../shared/settings";
 import { activate, closeWindow, DockApp, minimize, useDockApps, useIcon } from "./windows";
 
@@ -10,7 +10,7 @@ const MAGNIFY = 1.55;
 const REACH = 3;
 /** Auto-hide waits this long after the mouse leaves. */
 const HIDE_DELAY_MS = 500;
-/** With the dock hidden, this strip at the bottom of the screen brings it back. */
+/** With the dock hidden, this strip along the whole bottom edge of the screen brings it back. */
 const WAKE_STRIP = 3;
 /** Gap between the bar and the screen edge (keep in sync with BOTTOM_GAP in dock.rs). */
 const BOTTOM_GAP = 8;
@@ -50,29 +50,27 @@ function DockBar({ settings }: { settings: Settings }) {
   }, [settings.dockAutohide, inside]);
 
   // Where the window catches the mouse. Uses layout (offset*) values, so the slide animation doesn't move it.
-  // Hidden: a thin strip at the screen edge. Shown: the bar. In use: the bar plus the space above it
+  // Hidden: a thin strip along the whole bottom edge of the screen. Shown: the bar (plus that strip when
+  // auto-hiding, so resting the mouse in a corner keeps it up). In use: the bar plus the space above it
   // (magnified icons, labels, menu). Everywhere else clicks go through to the apps behind.
   useEffect(() => {
     const element = bar.current!;
     const report = () => {
       const windowHeight = document.documentElement.clientHeight;
       if (!shown) {
-        setHitRect({ x: 0, y: windowHeight - WAKE_STRIP, width: document.documentElement.clientWidth, height: WAKE_STRIP });
+        setHitBottomEdge(WAKE_STRIP);
         return;
       }
       const top = inside || menu ? 0 : element.offsetTop;
-      setHitRect({
-        x: element.offsetLeft,
-        y: top,
-        width: element.offsetWidth,
-        height: windowHeight - top,
-      });
+      const rect = { x: element.offsetLeft, y: top, width: element.offsetWidth, height: windowHeight - top };
+      if (settings.dockAutohide) setHitRectAndBottomEdge(rect, WAKE_STRIP);
+      else setHitRect(rect);
     };
     const observer = new ResizeObserver(report);
     observer.observe(element);
     report();
     return () => observer.disconnect();
-  }, [shown, inside, menu]);
+  }, [shown, inside, menu, settings.dockAutohide]);
 
   const hiddenOffset = settings.dockHeight + BOTTOM_GAP + 4;
 

@@ -33,10 +33,10 @@ pub fn run() {
                 })
                 .build(),
         )
-        .manage(hit::HitRects::default())
+        .manage(hit::HitAreas::default())
         .manage(win::IconCache::default())
         .invoke_handler(tauri::generate_handler![
-            hit::set_hit_rect,
+            hit::set_hit_area,
             win::get_windows,
             win::get_icon,
             win::activate_window,
