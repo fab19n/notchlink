@@ -40,9 +40,14 @@ pub struct AppWindow {
     is_minimized: bool,
 }
 
-/// Top-level windows a user would expect in a taskbar, front-most first.
+/// For the dock page. Async so it runs off the main thread.
 #[tauri::command]
-pub fn get_windows() -> Vec<AppWindow> {
+pub async fn get_windows() -> Vec<AppWindow> {
+    list_windows()
+}
+
+/// Top-level windows a user would expect in a taskbar, front-most first.
+fn list_windows() -> Vec<AppWindow> {
     let mut handles: Vec<HWND> = Vec::new();
     unsafe {
         EnumWindows(Some(collect), LPARAM(&mut handles as *mut _ as isize)).expect("EnumWindows failed");
@@ -82,10 +87,10 @@ fn is_taskbar_window(hwnd: HWND) -> bool {
             return false;
         }
         // Windows on other virtual desktops and suspended UWP windows are "cloaked".
+        // Failing to read it means the window just closed: skip it.
         let mut cloaked: u32 = 0;
-        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &mut cloaked as *mut _ as *mut _, size_of::<u32>() as u32)
-            .expect("DwmGetWindowAttribute failed");
-        cloaked == 0
+        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &mut cloaked as *mut _ as *mut _, size_of::<u32>() as u32).is_ok()
+            && cloaked == 0
     }
 }
 
@@ -131,8 +136,9 @@ pub fn activate_window(hwnd: isize) {
 pub struct IconCache(Mutex<HashMap<String, String>>);
 
 /// The program's icon as a PNG data URL, cached per exe path.
+/// Async so icon extraction runs off the main thread.
 #[tauri::command]
-pub fn get_icon(exe_path: String, cache: State<IconCache>) -> Result<String, String> {
+pub async fn get_icon(exe_path: String, cache: State<'_, IconCache>) -> Result<String, String> {
     if let Some(url) = cache.0.lock().unwrap().get(&exe_path) {
         return Ok(url.clone());
     }
@@ -144,11 +150,14 @@ pub fn get_icon(exe_path: String, cache: State<IconCache>) -> Result<String, Str
 fn extract_icon(exe_path: &str) -> Result<String, String> {
     unsafe {
         let mut icon = HICON::default();
-        SHDefExtractIconW(&HSTRING::from(exe_path), 0, 0, Some(&mut icon), None, ICON_SIZE)
-            .ok()
-            .map_err(|e| format!("no icon in {exe_path}: {e}"))?;
+        let result = SHDefExtractIconW(&HSTRING::from(exe_path), 0, 0, Some(&mut icon), None, ICON_SIZE);
+        // S_FALSE ("no icon") counts as success, so also check that we really got one.
+        result.ok().map_err(|e| format!("no icon in {exe_path}: {e}"))?;
+        if icon.is_invalid() {
+            return Err(format!("no icon in {exe_path}"));
+        }
         let rgba = icon_to_rgba(icon);
-        DestroyIcon(icon).expect("DestroyIcon failed");
+        DestroyIcon(icon).map_err(|e| format!("DestroyIcon failed for {exe_path}: {e}"))?;
         Ok(image::png_data_url(&rgba?, ICON_SIZE, ICON_SIZE))
     }
 }
@@ -171,7 +180,7 @@ pub fn spawn_window_watcher(app: AppHandle) {
         let mut last: Vec<AppWindow> = Vec::new();
         loop {
             thread::sleep(WATCH_INTERVAL);
-            let current = get_windows();
+            let current = list_windows();
             if current != last {
                 app.emit_to(DOCK, "windows-changed", &current).expect("failed to emit windows");
                 last = current;

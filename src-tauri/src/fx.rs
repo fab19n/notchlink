@@ -171,8 +171,11 @@ fn show(hwnd: isize, command: SHOW_WINDOW_CMD) {
     unsafe { _ = ShowWindow(HWND(hwnd as *mut _), command) };
 }
 
+/// Asks the window to close. It may already be gone; that's not an error worth crashing for.
 fn close(hwnd: isize) {
-    unsafe { PostMessageW(Some(HWND(hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0)).expect("can't close window") };
+    if let Err(e) = unsafe { PostMessageW(Some(HWND(hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0)) } {
+        eprintln!("[fx] couldn't close window {hwnd:#x}: {e}");
+    }
 }
 
 /// Runs `f` with Windows' own minimize/restore animation switched off, so only ours plays.
