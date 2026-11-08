@@ -50,15 +50,16 @@ pub fn hide() {
 }
 
 /// Safe to call at any time; does nothing if the taskbar isn't hidden.
+/// Runs on shutdown, so it must work even if another thread crashed while holding these locks.
 pub fn restore() {
-    let Some(state) = ORIGINAL_STATE.lock().unwrap().take() else {
+    let Some(state) = ORIGINAL_STATE.lock().unwrap_or_else(|e| e.into_inner()).take() else {
         return;
     };
     set_app_bar_state(state);
     for hwnd in taskbar_windows() {
         unsafe { _ = ShowWindow(hwnd, SW_SHOW) };
     }
-    if let Some(marker) = MARKER.lock().unwrap().as_ref() {
+    if let Some(marker) = MARKER.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
         _ = fs::remove_file(marker);
     }
 }

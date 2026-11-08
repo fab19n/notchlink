@@ -94,9 +94,9 @@ fn reserve(hwnd: HWND, monitor: &tauri::Monitor, height: i32) -> i32 {
     data.rc.bottom
 }
 
-/// Gives the reserved screen space back. Safe to call at any time.
+/// Gives the reserved screen space back. Safe to call at any time, including on shutdown after a crash.
 pub fn remove_app_bar() {
-    if let Some(hwnd) = APP_BAR.lock().unwrap().take() {
+    if let Some(hwnd) = APP_BAR.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let mut data = APPBARDATA {
             cbSize: size_of::<APPBARDATA>() as u32,
             hWnd: HWND(hwnd as *mut _),
