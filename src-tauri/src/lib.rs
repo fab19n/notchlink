@@ -28,7 +28,11 @@ pub fn run() {
                 .expect("invalid shortcut")
                 .with_handler(|app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        overlay::open_settings_window(app).expect("can't open settings");
+                        // Off the event handler: creating a window inside one deadlocks on Windows.
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            overlay::open_settings_window(&app).expect("can't open settings");
+                        });
                     }
                 })
                 .build(),

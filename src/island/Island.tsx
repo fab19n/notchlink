@@ -20,8 +20,8 @@ const MORPH = { type: "spring", stiffness: 380, damping: 30, mass: 0.9 } as cons
 /** How long the expanded island waits after the mouse leaves before closing. */
 const CLOSE_DELAY_MS = 450;
 
-/** Extra px around the island that still counts as "on the island". */
-const HIT_MARGIN = 6;
+/** Extra px around the island that still counts as "on the island". Covers the curved corners (EAR in island.css). */
+const HIT_MARGIN = 14;
 
 export default function Island() {
   const inside = usePointerInside();
@@ -67,6 +67,10 @@ export default function Island() {
         onAnimationComplete={() => setSettled(mode)}
         onClick={() => setMode("expanded")}
       >
+        {/* Concave corners where the notch meets the top edge, so it reads as part of the screen. */}
+        <span className="ear left" />
+        <span className="ear right" />
+        <div className="island-clip">
         <AnimatePresence mode="popLayout" initial={false}>
           {expanded ? (
             <motion.div
@@ -96,6 +100,7 @@ export default function Island() {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </motion.div>
     </div>
   );

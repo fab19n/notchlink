@@ -8,12 +8,42 @@
 
 .island {
   position: relative;
-  overflow: hidden;
   background: #000;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Clips the content to the island's rounded shape; the ears stay outside it. */
+.island-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+/* Concave corners: a black square with a transparent quarter-circle cut out of it. */
+.island {
+  --ear: 12px;
+}
+
+.ear {
+  position: absolute;
+  top: 0;
+  width: var(--ear);
+  height: var(--ear);
+  pointer-events: none;
+}
+
+.ear.left {
+  left: calc(-1 * var(--ear));
+  background: radial-gradient(circle at 0 100%, transparent var(--ear), #000 calc(var(--ear) + 0.5px));
+}
+
+.ear.right {
+  right: calc(-1 * var(--ear));
+  background: radial-gradient(circle at 100% 100%, transparent var(--ear), #000 calc(var(--ear) + 0.5px));
 }
 
 .collapsed {

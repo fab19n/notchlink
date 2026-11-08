@@ -63,11 +63,13 @@ pub fn create_fx(app: &AppHandle) -> tauri::Result<()> {
     window.show()
 }
 
+/// Async on purpose: on Windows, creating a window from a sync command deadlocks the app.
 #[tauri::command]
-pub fn open_settings(app: AppHandle) -> Result<(), String> {
+pub async fn open_settings(app: AppHandle) -> Result<(), String> {
     open_settings_window(&app).map_err(|e| e.to_string())
 }
 
+/// Must not run inside a sync command or an event handler (it deadlocks on Windows); see `open_settings`.
 pub fn open_settings_window(app: &AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window(SETTINGS) {
         window.unminimize()?;

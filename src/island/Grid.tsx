@@ -10,7 +10,7 @@ export default function Grid() {
       <Card title="Music" detail="Phase 3" />
       <Card title="Focus" detail="Timer: phase 2" />
       <Clock />
-      <Card title="Settings" detail="Dock, notch, taskbar" onClick={openSettings} />
+      <Card title="Settings" detail="Preferences" onClick={openSettings} />
     </motion.div>
   );
 }
