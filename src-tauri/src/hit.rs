@@ -6,26 +6,29 @@
 //! ignores the mouse, so clicks reach the apps underneath. The thread also
 //! tells the frontend when the pointer enters or leaves, because the page
 //! cannot see the mouse while it is being ignored.
+//!
+//! The same loop keeps the Windows taskbar hidden (see taskbar.rs).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::overlay::{DOCK, ISLAND};
+use crate::taskbar;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(30);
 
 /// A rectangle in logical (CSS) pixels, relative to the window's top-left corner.
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Rect {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
 }
 
 impl Rect {
@@ -47,6 +50,7 @@ pub fn spawn_hit_tester(app: AppHandle) {
         let mut inside: HashMap<&str, bool> = HashMap::new();
         loop {
             thread::sleep(POLL_INTERVAL);
+            taskbar::keep_hidden();
             let cursor = app.cursor_position().expect("cursor position unavailable");
             for label in [ISLAND, DOCK] {
                 let window = app.get_webview_window(label).expect("overlay window missing");

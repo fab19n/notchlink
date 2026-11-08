@@ -2,17 +2,24 @@
 
 A notch island and dock for Windows, built with Tauri 2, Rust, React and Motion.
 
-## Phase 1: what's in it
+## What's in it
 
 - **Island:** a black notch on the top edge of the main monitor, with placeholder eyes that blink.
-  - Hover: the eyes widen and the notch grows a little (peek).
-  - Click: the notch springs open into a card grid (only the clock is live so far).
+  - Hover: peeks (eyes widen, notch grows a little), or opens fully, depending on settings.
+  - Click: the notch springs open into a card grid (the clock is live; Settings opens the settings window).
   - Mouse leaves: it closes after a short delay.
-- **Dock:** sits just above the normal Windows taskbar.
-  - Shows your real open apps (one icon per program), with a dot for the app in front.
+- **Dock:** replaces the Windows taskbar (switchable in settings).
+  - Shows your open apps (one icon per program), with a dot for the app in front.
   - Icons magnify near the cursor; the window title shows on hover.
-  - Click: focus that app's front window, or minimize it if it's already in front.
-- Both windows are click-through everywhere except the notch and the dock bar.
+  - Click: bring that app to the front, or minimize it with a genie animation if it's already in front.
+  - Right-click an icon: Minimize/Show, Close window (with a TV switch-off animation).
+  - Right-click empty dock space: Settings, Quit notchlink.
+  - Auto-hide: slides away, comes back when the mouse touches the bottom edge. With auto-hide off,
+    maximized windows stop above the dock.
+- **Settings** (island Settings card, dock right-click, or Ctrl+Alt+N): notch hover behaviour,
+  replace taskbar, auto-hide, dock height, icon size, and Quit. Saved to
+  `%APPDATA%\com.fab19n.notchlink\settings.json`.
+- Everything is click-through except the notch and the dock bar.
 
 ## Run it on Windows
 
@@ -33,32 +40,48 @@ pnpm tauri dev
 ```
 
 The first run compiles all the Rust dependencies and takes a few minutes. Later runs are fast.
-To quit, close the terminal or press Ctrl+C in it (the overlays have no close button yet).
+
+To quit, use **Quit notchlink** (settings or dock right-click). Ctrl+C in the terminal also works.
+Both bring the Windows taskbar back.
+
+### If the taskbar doesn't come back
+
+If notchlink crashes while the taskbar is hidden, start notchlink again: it restores the taskbar on
+startup. If that doesn't work, open Task Manager (Ctrl+Shift+Esc), restart "Windows Explorer", and
+turn off "Automatically hide the taskbar" in Windows Settings > Personalization > Taskbar.
 
 ## How it's built
 
 | Part | File | Job |
 | --- | --- | --- |
-| Window setup | `src-tauri/src/overlay.rs` | Creates the transparent, always-on-top, non-focusable island and dock windows on the primary monitor |
-| Click-through | `src-tauri/src/hit.rs` | Polls the cursor; each window only catches the mouse inside the rectangle its page reports |
+| Window setup | `src-tauri/src/overlay.rs` | Creates the island, dock, animation and settings windows |
+| Settings | `src-tauri/src/settings.rs` | Loads, validates, saves and applies settings |
+| Taskbar | `src-tauri/src/taskbar.rs` | Hides and restores the Windows taskbar |
+| Dock placement | `src-tauri/src/dock.rs` | Sizes and places the dock; reserves screen space when auto-hide is off |
+| Animations | `src-tauri/src/fx.rs`, `src/fx/` | Window snapshots and the genie / TV-off effects |
+| Click-through | `src-tauri/src/hit.rs` | Polls the cursor; each window only catches the mouse inside the rectangle its page reports. Also keeps the taskbar hidden |
 | Open windows | `src-tauri/src/win.rs` | Lists taskbar-style windows, extracts app icons, focuses or minimizes on click |
 | Island UI | `src/island/` | The notch states and spring morphs |
-| Dock UI | `src/dock/` | Grouping windows into apps, magnification |
+| Dock UI | `src/dock/` | Grouping windows into apps, magnification, auto-hide, right-click menu |
+| Settings UI | `src/settings/` | The settings window |
 
 ## Please test and report back
 
-- [ ] Does the notch sit centred and flush with the top of the screen?
-- [ ] Do apps behind the transparent parts still get clicks (top of the screen, beside the dock)?
-- [ ] Peek on hover, open on click, close on leave: does the spring feel right? Too bouncy, too slow?
-- [ ] Does the island ever steal focus from the app you're typing in?
-- [ ] Dock: are the right apps shown? Any missing, or any that shouldn't be there?
-- [ ] Dock: does clicking an icon bring that app to the front? Does clicking the front app minimize it?
-- [ ] Do the app icons look sharp?
-- [ ] What is your display scaling (100%, 125%, 150%)?
+- [ ] Is the Windows taskbar gone, and do maximized windows use the full screen height?
+- [ ] Does the taskbar ever flash back (Win key, mouse at the bottom edge, opening Start)?
+- [ ] Auto-hide: does the dock come back at the bottom edge and hide after you leave?
+- [ ] Auto-hide off: do maximized windows stop above the dock?
+- [ ] Can you click things right above the dock and beside it now?
+- [ ] Genie minimize and TV-off close: do they look right? Any flash of the real window?
+- [ ] Do the settings apply instantly? Does Ctrl+Alt+N open them?
+- [ ] Does Quit (and Ctrl+C) bring the taskbar back?
 
-## Known limits in Phase 1
+## Known limits
 
 - Store (UWP) apps may show the wrong icon, because their window belongs to a host process.
 - Apps running as administrator are skipped (Windows doesn't let a normal app read their details).
-- The dock doesn't hide the real taskbar yet, and has no pinned apps.
+- The genie and TV-off animations only play for dock actions, not the apps' own buttons.
+- If an app asks "save changes?" when closed from the dock, the TV-off animation still plays.
+- The system tray, notifications and quick settings are hidden with the taskbar until they move into the island.
+- The dock has no pinned apps yet.
 - The eyes are placeholders until the mascot design is ready.

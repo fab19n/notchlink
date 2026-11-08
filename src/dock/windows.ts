@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import type { Rect } from "../shared/overlay";
 
 /** Mirrors `AppWindow` in src-tauri/src/win.rs. */
 export type AppWindow = { hwnd: number; title: string; exePath: string; isForeground: boolean };
@@ -63,4 +64,14 @@ export function useIcon(exePath: string) {
 
 export function activate(hwnd: number) {
   return invoke("activate_window", { hwnd });
+}
+
+/** Minimize with the genie animation into `icon` (the dock icon's rect in this window). */
+export function minimize(hwnd: number, icon: Rect) {
+  return invoke("minimize_window", { hwnd, icon });
+}
+
+/** Close with the TV switch-off animation. */
+export function closeWindow(hwnd: number) {
+  return invoke("close_window", { hwnd });
 }

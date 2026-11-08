@@ -5,14 +5,11 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-use base64::Engine;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
-use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, ReleaseDC,
-};
+use windows::Win32::Graphics::Gdi::DeleteObject;
 use windows::Win32::System::Threading::{
     GetCurrentProcessId, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     QueryFullProcessImageNameW,
@@ -21,10 +18,11 @@ use windows::Win32::UI::Shell::SHDefExtractIconW;
 use windows::Win32::UI::WindowsAndMessaging::{
     DestroyIcon, EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetIconInfo, GetWindow,
     GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, HICON, ICONINFO, IsIconic,
-    IsWindowVisible, SW_MINIMIZE, SW_RESTORE, SetForegroundWindow, ShowWindow, WS_EX_TOOLWINDOW,
+    IsWindowVisible, SW_RESTORE, SetForegroundWindow, ShowWindow, WS_EX_TOOLWINDOW,
 };
 use windows::core::{BOOL, HSTRING, PWSTR};
 
+use crate::image;
 use crate::overlay::DOCK;
 
 const WATCH_INTERVAL: Duration = Duration::from_millis(800);
@@ -114,15 +112,12 @@ fn exe_path(hwnd: HWND) -> Option<String> {
     }
 }
 
-/// Click on a dock icon: restore and focus the window, or minimize it if it is already in front.
+/// Click on a dock icon for an app that isn't in front: restore and focus its window.
+/// (Minimizing the front app goes through fx.rs, for the animation.)
 #[tauri::command]
 pub fn activate_window(hwnd: isize) {
     let hwnd = HWND(hwnd as *mut _);
     unsafe {
-        if GetForegroundWindow() == hwnd {
-            let _ = ShowWindow(hwnd, SW_MINIMIZE);
-            return;
-        }
         if IsIconic(hwnd).as_bool() {
             let _ = ShowWindow(hwnd, SW_RESTORE);
         }
@@ -152,8 +147,7 @@ fn extract_icon(exe_path: &str) -> Result<String, String> {
             .map_err(|e| format!("no icon in {exe_path}: {e}"))?;
         let rgba = icon_to_rgba(icon);
         DestroyIcon(icon).expect("DestroyIcon failed");
-        let rgba = rgba?;
-        Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(encode_png(&rgba))))
+        Ok(image::png_data_url(&rgba?, ICON_SIZE, ICON_SIZE))
     }
 }
 
@@ -162,54 +156,11 @@ unsafe fn icon_to_rgba(icon: HICON) -> Result<Vec<u8>, String> {
     unsafe {
         let mut info = ICONINFO::default();
         GetIconInfo(icon, &mut info).map_err(|e| format!("GetIconInfo failed: {e}"))?;
-        let mut header = BITMAPINFO::default();
-        header.bmiHeader = BITMAPINFOHEADER {
-            biSize: size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: ICON_SIZE as i32,
-            biHeight: -(ICON_SIZE as i32), // negative = top-down rows
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
-            ..Default::default()
-        };
-        let mut pixels = vec![0u8; (ICON_SIZE * ICON_SIZE * 4) as usize];
-        let dc = GetDC(None);
-        let rows = GetDIBits(
-            dc,
-            info.hbmColor,
-            0,
-            ICON_SIZE,
-            Some(pixels.as_mut_ptr() as *mut _),
-            &mut header,
-            DIB_RGB_COLORS,
-        );
-        ReleaseDC(None, dc);
+        let pixels = image::bitmap_rgba(info.hbmColor, ICON_SIZE, ICON_SIZE);
         let _ = DeleteObject(info.hbmColor.into());
         let _ = DeleteObject(info.hbmMask.into());
-        if rows == 0 {
-            return Err("GetDIBits failed".into());
-        }
-        // BGRA -> RGBA. Old icons without an alpha channel are fully opaque.
-        let has_alpha = pixels.chunks_exact(4).any(|p| p[3] != 0);
-        for p in pixels.chunks_exact_mut(4) {
-            p.swap(0, 2);
-            if !has_alpha {
-                p[3] = 255;
-            }
-        }
-        Ok(pixels)
+        pixels
     }
-}
-
-fn encode_png(rgba: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
-    let mut encoder = png::Encoder::new(&mut out, ICON_SIZE, ICON_SIZE);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().expect("png header");
-    writer.write_image_data(rgba).expect("png data");
-    writer.finish().expect("png finish");
-    out
 }
 
 /// Sends the window list to the dock whenever it changes.

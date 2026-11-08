@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Eyes from "./Eyes";
 import Grid from "./Grid";
 import { setHitRect, usePointerInside } from "../shared/overlay";
+import { useSettings } from "../shared/settings";
 
 type Mode = "idle" | "peek" | "expanded";
 
@@ -24,12 +25,14 @@ const HIT_MARGIN = 6;
 
 export default function Island() {
   const inside = usePointerInside();
+  const hoverOpens = useSettings()?.islandOpen === "hover";
   const [mode, setMode] = useState<Mode>("idle");
 
-  // Hover peeks; leaving closes (with a delay when expanded, so overshooting doesn't snap it shut).
+  // Hover peeks (or opens fully, per settings); leaving closes, with a delay when
+  // expanded so overshooting doesn't snap it shut.
   useEffect(() => {
     if (inside) {
-      setMode((m) => (m === "idle" ? "peek" : m));
+      setMode((m) => (m === "idle" ? (hoverOpens ? "expanded" : "peek") : m));
       return;
     }
     if (mode === "expanded") {
@@ -37,7 +40,7 @@ export default function Island() {
       return () => clearTimeout(timer);
     }
     setMode("idle");
-  }, [inside, mode]);
+  }, [inside, mode, hoverOpens]);
 
   // Catch the mouse over whichever is larger, where the island is now or where it is going,
   // so it never turns click-through under the cursor mid-animation.

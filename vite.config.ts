@@ -10,12 +10,14 @@ const page = (file: string) => fileURLToPath(new URL(file, import.meta.url));
 export default defineConfig(() => ({
   plugins: [react()],
 
-  // Two pages: one per overlay window.
+  // One page per window.
   build: {
     rollupOptions: {
       input: {
         island: page("index.html"),
         dock: page("dock.html"),
+        fx: page("fx.html"),
+        settings: page("settings.html"),
       },
     },
   },

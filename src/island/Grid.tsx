@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
+import { openSettings } from "../shared/settings";
 
 /** Expanded home view. Only the clock is real in Phase 1; the other cards show which phase fills them. */
 export default function Grid() {
@@ -9,7 +10,7 @@ export default function Grid() {
       <Card title="Music" detail="Phase 3" />
       <Card title="Focus" detail="Timer: phase 2" />
       <Clock />
-      <Card title="Settings" detail="Settings window" />
+      <Card title="Settings" detail="Dock, notch, taskbar" onClick={openSettings} />
     </motion.div>
   );
 }
@@ -19,9 +20,17 @@ const cardVariants = {
   shown: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 500, damping: 32 } },
 } as const;
 
-function Card({ title, detail, className = "" }: { title: string; detail: string; className?: string }) {
+type CardProps = { title: string; detail: string; className?: string; onClick?: () => void };
+
+function Card({ title, detail, className = "", onClick }: CardProps) {
   return (
-    <motion.div className={`card ${className}`} variants={cardVariants}>
+    <motion.div
+      className={`card ${className} ${onClick ? "clickable" : ""}`}
+      variants={cardVariants}
+      onClick={onClick}
+      whileHover={onClick ? { scale: 1.03 } : undefined}
+      whileTap={onClick ? { scale: 0.97 } : undefined}
+    >
       <span className="card-title">{title}</span>
       <span className="card-detail">{detail}</span>
     </motion.div>
