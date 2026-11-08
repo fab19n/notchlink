@@ -1,0 +1,6 @@
+Phase 1: notch island shell and dock with real open apps
+
+- Transparent, always-on-top, non-focusable island and dock windows
+- Click-through outside the notch and dock bar (cursor polling in Rust)
+- Island: idle eyes, hover peek, click to expand to a card grid, spring morphs
+- Dock: open windows grouped by app, icons, magnification, focus/minimize on click
