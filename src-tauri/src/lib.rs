@@ -5,6 +5,7 @@ mod dock;
 mod fx;
 mod hit;
 mod image;
+mod levels;
 mod overlay;
 mod settings;
 mod taskbar;
@@ -46,6 +47,10 @@ pub fn run() {
             win::activate_window,
             fx::minimize_window,
             fx::close_window,
+            levels::get_volume_level,
+            levels::set_volume_level,
+            levels::get_brightness_level,
+            levels::set_brightness_level,
             settings::get_settings,
             settings::update_settings,
             overlay::open_settings,
@@ -61,6 +66,8 @@ pub fn run() {
             overlay::create_island(handle)?;
             overlay::create_dock(handle)?;
             overlay::create_fx(handle)?;
+            overlay::create_edges(handle)?;
+            app.manage(levels::start());
             settings::apply(handle, &settings);
             overlay::show_dock(handle)?;
             app.manage(settings::SettingsState(Mutex::new(settings)));

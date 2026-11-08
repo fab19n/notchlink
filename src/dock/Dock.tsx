@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionValue, useMotionValue, useSpring, useTransform } from "motion/react";
 import { Rect, setHitBottomEdge, setHitRect, setHitRectAndBottomEdge, usePointerInside } from "../shared/overlay";
-import { openSettings, quit, Settings, useSettings } from "../shared/settings";
+import { DOCK_PADDING, openSettings, quit, Settings, useSettings } from "../shared/settings";
 import { activate, closeWindow, DockApp, minimize, useDockApps, useIcon } from "./windows";
 
 /** Icons grow to this multiple of their size under the cursor (keep in sync with src-tauri/src/dock.rs). */
@@ -28,6 +28,7 @@ function DockBar({ settings }: { settings: Settings }) {
   const inside = usePointerInside();
   const mouseX = useMotionValue(Infinity);
   const bar = useRef<HTMLDivElement>(null);
+  const menuBox = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
 
   // Leaving the dock clears magnification and closes any menu.
@@ -51,8 +52,9 @@ function DockBar({ settings }: { settings: Settings }) {
 
   // Where the window catches the mouse. Uses layout (offset*) values, so the slide animation doesn't move it.
   // Hidden: a thin strip along the whole bottom edge of the screen. Shown: the bar (plus that strip when
-  // auto-hiding, so resting the mouse in a corner keeps it up). In use: the bar plus the space above it
-  // (magnified icons, labels, menu). Everywhere else clicks go through to the apps behind.
+  // auto-hiding, so resting the mouse in a corner keeps it up). In use: the bar, plus just enough above it
+  // for magnified icons, plus the menu when open. Nothing else: everywhere else, including the space
+  // just above the dock, clicks go through to the apps behind.
   useEffect(() => {
     const element = bar.current!;
     const report = () => {
@@ -61,8 +63,19 @@ function DockBar({ settings }: { settings: Settings }) {
         setHitBottomEdge(WAKE_STRIP);
         return;
       }
-      const top = inside || menu ? 0 : element.offsetTop;
-      const rect = { x: element.offsetLeft, y: top, width: element.offsetWidth, height: windowHeight - top };
+      // How far magnified icons stick out above the bar.
+      const overflow = inside ? Math.max(0, settings.iconSize * MAGNIFY + DOCK_PADDING - settings.dockHeight) + 4 : 0;
+      let rect: Rect = {
+        x: element.offsetLeft,
+        y: element.offsetTop - overflow,
+        width: element.offsetWidth,
+        height: windowHeight - element.offsetTop + overflow,
+      };
+      const m = menuBox.current;
+      if (m) {
+        // offset* ignore the menu's CSS translate(-50%), so centre it by hand.
+        rect = union(rect, { x: m.offsetLeft - m.offsetWidth / 2, y: m.offsetTop, width: m.offsetWidth, height: m.offsetHeight });
+      }
       if (settings.dockAutohide) setHitRectAndBottomEdge(rect, WAKE_STRIP);
       else setHitRect(rect);
     };
@@ -70,7 +83,7 @@ function DockBar({ settings }: { settings: Settings }) {
     observer.observe(element);
     report();
     return () => observer.disconnect();
-  }, [shown, inside, menu, settings.dockAutohide]);
+  }, [shown, inside, menu, settings.dockAutohide, settings.iconSize, settings.dockHeight]);
 
   const hiddenOffset = settings.dockHeight + BOTTOM_GAP + 4;
 
@@ -102,6 +115,7 @@ function DockBar({ settings }: { settings: Settings }) {
       <AnimatePresence>
         {menu && (
           <ContextMenu
+            ref={menuBox}
             key={menu.kind === "app" ? menu.app.exePath : "dock"}
             menu={menu}
             bottom={settings.dockHeight + BOTTOM_GAP + 10}
@@ -184,7 +198,9 @@ function DockIcon({ app, size, mouseX, menuOpen, onMenu }: IconProps) {
   );
 }
 
-function ContextMenu({ menu, bottom, onDone }: { menu: Menu; bottom: number; onDone: () => void }) {
+type MenuProps = { menu: Menu; bottom: number; onDone: () => void; ref: React.Ref<HTMLDivElement> };
+
+function ContextMenu({ menu, bottom, onDone, ref }: MenuProps) {
   const items =
     menu.kind === "app"
       ? [
@@ -200,6 +216,7 @@ function ContextMenu({ menu, bottom, onDone }: { menu: Menu; bottom: number; onD
 
   return (
     <motion.div
+      ref={ref}
       className="dock-menu"
       style={{ left: menu.x, bottom }}
       initial={{ opacity: 0, y: 6, scale: 0.96 }}
@@ -222,4 +239,15 @@ function ContextMenu({ menu, bottom, onDone }: { menu: Menu; bottom: number; onD
       ))}
     </motion.div>
   );
+}
+
+function union(a: Rect, b: Rect): Rect {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return {
+    x,
+    y,
+    width: Math.max(a.x + a.width, b.x + b.width) - x,
+    height: Math.max(a.y + a.height, b.y + b.height) - y,
+  };
 }

@@ -18,7 +18,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
-use crate::overlay::{DOCK, ISLAND};
 use crate::taskbar;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(30);
@@ -59,16 +58,16 @@ pub fn set_hit_area(window: WebviewWindow, area: HitArea, areas: State<HitAreas>
 
 pub fn spawn_hit_tester(app: AppHandle) {
     thread::spawn(move || {
-        let mut inside: HashMap<&str, bool> = HashMap::new();
+        let mut inside: HashMap<String, bool> = HashMap::new();
         loop {
             thread::sleep(POLL_INTERVAL);
             taskbar::keep_hidden();
             let cursor = app.cursor_position().expect("cursor position unavailable");
-            for label in [ISLAND, DOCK] {
-                let window = app.get_webview_window(label).expect("overlay window missing");
-                let Some(area) = app.state::<HitAreas>().0.lock().unwrap().get(label).copied() else {
-                    continue;
-                };
+            // Every window that has reported a hit area (island, dock, edge panels).
+            let areas: Vec<(String, HitArea)> =
+                app.state::<HitAreas>().0.lock().unwrap().iter().map(|(l, a)| (l.clone(), *a)).collect();
+            for (label, area) in areas {
+                let window = app.get_webview_window(&label).expect("overlay window missing");
                 let in_rect = |rect: Rect| {
                     let origin = window.outer_position().expect("window position unavailable");
                     let scale = window.scale_factor().expect("scale factor unavailable");
@@ -85,13 +84,13 @@ pub fn spawn_hit_tester(app: AppHandle) {
                     HitArea::BottomEdge { height } => on_bottom_edge(height),
                     HitArea::RectAndBottomEdge { rect, height } => in_rect(rect) || on_bottom_edge(height),
                 };
-                if inside.get(label) != Some(&now_inside) {
+                if inside.get(&label) != Some(&now_inside) {
                     eprintln!("[hit] {label}: pointer {} at ({:.0}, {:.0})", if now_inside { "in" } else { "out" }, cursor.x, cursor.y);
-                    inside.insert(label, now_inside);
+                    inside.insert(label.clone(), now_inside);
                     window
                         .set_ignore_cursor_events(!now_inside)
                         .expect("failed to toggle click-through");
-                    app.emit_to(label, "pointer", now_inside).expect("failed to emit pointer event");
+                    app.emit_to(&label, "pointer", now_inside).expect("failed to emit pointer event");
                 }
             }
         }

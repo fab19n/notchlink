@@ -8,6 +8,12 @@ pub const DOCK: &str = "dock";
 /// Full-screen, always click-through layer for the minimize and close animations.
 pub const FX: &str = "fx";
 pub const SETTINGS: &str = "settings";
+/// Volume panel on the left screen edge, brightness on the right.
+pub const VOLUME: &str = "volume";
+pub const BRIGHTNESS: &str = "brightness";
+
+/// Logical size of each edge panel window (room for the panel and its curved corners).
+const EDGE_SIZE: (f64, f64) = (80.0, 340.0);
 
 /// Logical size of the island window: big enough for the expanded island.
 const ISLAND_SIZE: (f64, f64) = (680.0, 320.0);
@@ -52,6 +58,24 @@ pub fn create_dock(app: &AppHandle) -> tauri::Result<()> {
 
 pub fn show_dock(app: &AppHandle) -> tauri::Result<()> {
     app.get_webview_window(DOCK).expect("dock window missing").show()
+}
+
+/// Volume (left) and brightness (right) panels, vertically centred on the screen edges.
+pub fn create_edges(app: &AppHandle) -> tauri::Result<()> {
+    let monitor = primary_monitor(app)?;
+    let scale = monitor.scale_factor();
+    let (width, height) = ((EDGE_SIZE.0 * scale) as i32, (EDGE_SIZE.1 * scale) as i32);
+    let y = monitor.position().y + (monitor.size().height as i32 - height) / 2;
+    for (label, x) in [
+        (VOLUME, monitor.position().x),
+        (BRIGHTNESS, monitor.position().x + monitor.size().width as i32 - width),
+    ] {
+        let window = overlay(app, label, "edge.html")?;
+        window.set_size(tauri::LogicalSize::new(EDGE_SIZE.0, EDGE_SIZE.1))?;
+        window.set_position(PhysicalPosition::new(x, y))?;
+        window.show()?;
+    }
+    Ok(())
 }
 
 /// Covers the primary monitor exactly.

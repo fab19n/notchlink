@@ -1,0 +1,107 @@
+.edge-stage {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.edge-stage.right {
+  justify-content: flex-end;
+}
+
+.edge-panel {
+  --ear: 12px; /* keep in sync with EAR in Edge.tsx */
+  position: relative;
+  width: 58px;
+  height: 280px;
+  padding: 22px 0 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  background: #000;
+}
+
+/* Rounded on the side facing the screen, flush on the side touching the edge. */
+.edge-panel.left {
+  border-radius: 0 28px 28px 0;
+}
+
+.edge-panel.right {
+  border-radius: 28px 0 0 28px;
+}
+
+/* Concave corners above and below, where the panel meets the screen edge. */
+.edge-ear {
+  position: absolute;
+  width: var(--ear);
+  height: var(--ear);
+  pointer-events: none;
+}
+
+.edge-ear.top {
+  top: calc(-1 * var(--ear));
+}
+
+.edge-ear.bottom {
+  bottom: calc(-1 * var(--ear));
+}
+
+.edge-panel.left .edge-ear {
+  left: 0;
+}
+
+.edge-panel.right .edge-ear {
+  right: 0;
+}
+
+.edge-panel.left .edge-ear.top {
+  background: radial-gradient(circle at 100% 0, transparent var(--ear), #000 calc(var(--ear) + 0.5px));
+}
+
+.edge-panel.left .edge-ear.bottom {
+  background: radial-gradient(circle at 100% 100%, transparent var(--ear), #000 calc(var(--ear) + 0.5px));
+}
+
+.edge-panel.right .edge-ear.top {
+  background: radial-gradient(circle at 0 0, transparent var(--ear), #000 calc(var(--ear) + 0.5px));
+}
+
+.edge-panel.right .edge-ear.bottom {
+  background: radial-gradient(circle at 0 100%, transparent var(--ear), #000 calc(var(--ear) + 0.5px));
+}
+
+.edge-track {
+  position: relative;
+  flex: 1;
+  width: 14px;
+  border-radius: 7px;
+  background: #3a3a3c;
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.edge-track.unsupported {
+  cursor: not-allowed;
+}
+
+.edge-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.edge-icon {
+  width: 26px;
+  height: 26px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.edge-icon.dim {
+  opacity: 0.35;
+}

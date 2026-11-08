@@ -16,6 +16,9 @@ A notch island and dock for Windows, built with Tauri 2, Rust, React and Motion.
   - Right-click empty dock space: Settings, Quit notchlink.
   - Auto-hide: slides away, comes back when the mouse touches the bottom edge. With auto-hide off,
     maximized windows stop above the dock.
+- **Volume and brightness panels:** move the mouse to the middle of the left screen edge (volume) or
+  right screen edge (brightness); the panel slides out. Scroll or drag to change the level. Brightness
+  works on built-in laptop screens only.
 - **Settings** (island Settings card, dock right-click, or Ctrl+Alt+N): notch hover behaviour,
   replace taskbar, auto-hide, dock height, icon size, and Quit. Saved to
   `%APPDATA%\com.fab19n.notchlink\settings.json`.
@@ -59,6 +62,7 @@ turn off "Automatically hide the taskbar" in Windows Settings > Personalization 
 | Taskbar | `src-tauri/src/taskbar.rs` | Hides and restores the Windows taskbar |
 | Dock placement | `src-tauri/src/dock.rs` | Sizes and places the dock; reserves screen space when auto-hide is off |
 | Animations | `src-tauri/src/fx.rs`, `src/fx/` | Window snapshots and the genie / TV-off effects |
+| Volume, brightness | `src-tauri/src/levels.rs`, `src/edge/` | Audio and WMI brightness control; the edge panels |
 | Click-through | `src-tauri/src/hit.rs` | Polls the cursor; each window only catches the mouse inside the rectangle its page reports. Also keeps the taskbar hidden |
 | Open windows | `src-tauri/src/win.rs` | Lists taskbar-style windows, extracts app icons, focuses or minimizes on click |
 | Island UI | `src/island/` | The notch states and spring morphs |

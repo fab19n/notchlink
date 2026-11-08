@@ -18,6 +18,7 @@ export default defineConfig(() => ({
         dock: page("dock.html"),
         fx: page("fx.html"),
         settings: page("settings.html"),
+        edge: page("edge.html"),
       },
     },
   },
